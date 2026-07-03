@@ -915,6 +915,7 @@ function StudentsPage({students,setStudents,prayers,attendance}){
   const[modal,setModal]=useState(false);
   const[sel,setSel]=useState(null);
   const[sheetOpen,setSheetOpen]=useState(false);
+  const[importMsg,setImportMsg]=useState(null);
   const grades={중등부:["중1","중2","중3"],고등부:["고1","고2","고3"]};
   const empty={dept:"중등부",grade:"중1",name:"",birth:"",gender:"여",phone:"",parentPhone:"",school:"",banName:"1반",churchReg:"등록",memo:"",prayerTopic:""};
   const[form,setForm]=useState(empty);
@@ -923,6 +924,56 @@ function StudentsPage({students,setStudents,prayers,attendance}){
   const bans=[...new Set(students.filter(s=>s.dept===dept).map(s=>s.banName))].sort();
   const careCount=filtered.filter(s=>consecutiveAbsences(s.id,attendance)>=2).length;
   const save=()=>{if(!form.name){alert("이름 필수");return;}setStudents(prev=>sel?prev.map(s=>s.id===sel.id?{...s,...form}:s):[...prev,{id:Date.now(),...form}]);setModal(false);};
+
+  // 학생 일괄 등록 양식 다운로드 (현재 부서 학생 명단 미리 채움 — 기존 학생 정보 수정 + 신규 행 추가 모두 가능)
+  const STUDENT_TEMPLATE_HEADERS=["이름","반","학년","성별","생년월일","학교","교적","연락처","부모님연락처","기도제목","메모"];
+  const downloadStudentTemplate=()=>{
+    const rows=filtered.sort((a,b)=>a.banName.localeCompare(b.banName)||a.name.localeCompare(b.name))
+      .map(s=>[s.name,s.banName,s.grade,s.gender,s.birth||"",s.school||"",s.churchReg,s.phone||"",s.parentPhone||"",s.prayerTopic||"",s.memo||""]);
+    downloadCSV(`${dept}_학생일괄등록양식`,STUDENT_TEMPLATE_HEADERS,rows);
+  };
+  // 작성된 양식을 읽어 학생을 일괄 등록/수정 (이름+반으로 기존 학생 매칭, 없으면 신규 추가)
+  const handleImportStudents=(file)=>{
+    const reader=new FileReader();
+    reader.onload=(e)=>{
+      try{
+        const rows=parseCSV(String(e.target.result));
+        if(rows.length<2){setImportMsg({type:"danger",text:"파일에 데이터가 없습니다."});return;}
+        const header=rows[0].map(h=>h.trim());
+        const col=name=>header.indexOf(name);
+        const idx={name:col("이름"),ban:col("반"),grade:col("학년"),gender:col("성별"),birth:col("생년월일"),school:col("학교"),reg:col("교적"),phone:col("연락처"),pphone:col("부모님연락처"),prayer:col("기도제목"),memo:col("메모")};
+        if(idx.name===-1){setImportMsg({type:"danger",text:"'이름' 열을 찾을 수 없습니다. '학생 일괄 등록 양식'으로 받은 파일 형식을 사용해주세요."});return;}
+        // setStudents의 함수형 업데이터는 FileReader 콜백 밖에서 비동기로 실행될 수 있어,
+        // 건수 집계는 현재 students 스냅샷 기준으로 미리 동기 계산한 뒤 결과 배열을 그대로 넘긴다.
+        let added=0, updated=0, skipped=0;
+        let next=[...students];
+        for(let r=1;r<rows.length;r++){
+          const row=rows[r];
+          const name=(row[idx.name]||"").trim();
+          if(!name){skipped++;continue;}
+          const banName=idx.ban>-1?(row[idx.ban]||"1반").trim():"1반";
+          const rec={
+            dept, name, banName,
+            grade:idx.grade>-1&&row[idx.grade]?.trim()||(grades[dept]?.[0]||""),
+            gender:idx.gender>-1&&row[idx.gender]?.trim()||"남",
+            birth:idx.birth>-1?(row[idx.birth]||"").trim():"",
+            school:idx.school>-1?(row[idx.school]||"").trim():"",
+            churchReg:idx.reg>-1&&row[idx.reg]?.trim()||"등록",
+            phone:idx.phone>-1?(row[idx.phone]||"").trim():"",
+            parentPhone:idx.pphone>-1?(row[idx.pphone]||"").trim():"",
+            prayerTopic:idx.prayer>-1?(row[idx.prayer]||"").trim():"",
+            memo:idx.memo>-1?(row[idx.memo]||"").trim():"",
+          };
+          const existingIdx=next.findIndex(s=>s.dept===dept&&s.name===name&&s.banName===banName);
+          if(existingIdx>-1){ next[existingIdx]={...next[existingIdx],...rec}; updated++; }
+          else { next.push({id:Date.now()+Math.random(),...rec}); added++; }
+        }
+        setStudents(next);
+        setImportMsg({type:"success",text:`신규 등록 ${added}명 · 정보 수정 ${updated}명이 반영되었습니다.${skipped>0?` (이름 누락으로 건너뜀 ${skipped}건)`:""}`});
+      }catch(err){ setImportMsg({type:"danger",text:"파일을 읽는 중 오류가 발생했습니다: "+err.message}); }
+    };
+    reader.readAsText(file,"utf-8");
+  };
 
   if(sel){
     const st=students.find(s=>s.id===sel.id)||sel;
@@ -970,11 +1021,14 @@ function StudentsPage({students,setStudents,prayers,attendance}){
   return <div>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
       <div><div style={{fontSize:20,fontWeight:800}}>학생 관리</div><div style={{fontSize:13,color:C.textH,marginTop:2}}>전체 학생 명단</div></div>
-      <div style={{display:"flex",gap:8}}>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
         <SheetBtn onClick={()=>setSheetOpen(true)} label="학생명단 CSV 다운로드"/>
+        <Btn s="sm" onClick={downloadStudentTemplate}><span style={{fontSize:13}}>📋</span> 일괄 등록 양식 다운로드</Btn>
+        <FileUploadBtn onFile={handleImportStudents} label="파일로 일괄 등록"/>
         <Btn v="primary" onClick={()=>{setForm({...empty,dept,grade:dept==="중등부"?"중1":"고1"});setSel(null);setModal(true);}}>+ 학생 등록</Btn>
       </div>
     </div>
+    {importMsg&&<Alert type={importMsg.type}>{importMsg.text}</Alert>}
     {careCount>0&&<Alert type="warn">⚠️ 2주 이상 연속 결석 학생이 {careCount}명 있습니다. 심방·관심이 필요합니다. (표 안의 <Chip c="red">⚠️ 결석</Chip> 표시 참고)</Alert>}
     <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
       {["중등부","고등부"].map(d=><button key={d} onClick={()=>{setDept(d);setSearch("");}} style={{padding:"7px 18px",borderRadius:20,fontSize:13,fontWeight:600,cursor:"pointer",border:"none",background:d===dept?C.primary:C.surfaceL,color:d===dept?"#fff":C.textS}}>{d}</button>)}
