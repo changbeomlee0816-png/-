@@ -419,7 +419,7 @@ function flattenMenu(menu){
   return out;
 }
 
-function Sidebar({page,setPage,role,onLogout,mobile,open,onClose}){
+function Sidebar({page,setPage,role,onLogout,mobile,open,onClose,onResetAll}){
   const menu=role==="admin"?ADMIN_MENU:role==="teacher"?TEACHER_MENU:PARENT_MENU;
   const roleLabel=role==="admin"?"👑 전도사님/부장님":role==="teacher"?"👩‍🏫 선생님":"👨‍👩‍👧 학부모";
   const isChildActive=m=>m.children?m.children.some(c=>c.k===page):false;
@@ -473,7 +473,10 @@ function Sidebar({page,setPage,role,onLogout,mobile,open,onClose}){
         </div>;
       })}
     </nav>
-    <div style={{padding:"12px 16px",borderTop:"1px solid rgba(255,255,255,.08)",fontSize:11,color:"rgba(255,255,255,.3)"}}>{new Date().toLocaleDateString("ko-KR",{year:"numeric",month:"long",day:"numeric",weekday:"short"})}</div>
+    <div style={{padding:"12px 16px",borderTop:"1px solid rgba(255,255,255,.08)"}}>
+      <div style={{fontSize:11,color:"rgba(255,255,255,.3)",marginBottom:role==="admin"?8:0}}>{new Date().toLocaleDateString("ko-KR",{year:"numeric",month:"long",day:"numeric",weekday:"short"})}</div>
+      {role==="admin"&&<button onClick={onResetAll} title="현재 코드에 저장된 기본 데이터로 서버·기기 데이터를 되돌립니다 (예: 새로 배포한 명단 반영)" style={{width:"100%",textAlign:"left",background:"none",border:"none",color:"rgba(255,255,255,.28)",cursor:"pointer",fontSize:10,padding:0}}>⚠️ 코드 기본값으로 데이터 초기화</button>}
+    </div>
   </div>;
   const sidebarBg="linear-gradient(180deg,#211D52 0%,#1E1B4B 55%,#181530 100%)";
   if(mobile)return <>{open&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",zIndex:90}} onClick={onClose}/>}<div style={{position:"fixed",top:0,left:0,bottom:0,width:235,background:sidebarBg,zIndex:100,transform:open?"translateX(0)":"translateX(-100%)",transition:"transform .25s ease",boxShadow:"4px 0 24px rgba(0,0,0,.25)"}}>{content}</div></>;
@@ -1997,7 +2000,7 @@ function SuseoChurchERP(){
   </span>;
 
   return <div style={{display:"flex",height:"100vh",fontFamily:"'Pretendard','Apple SD Gothic Neo','Noto Sans KR',system-ui,sans-serif",background:C.bg,color:C.text,overflow:"hidden"}}>
-    <Sidebar page={page} setPage={p=>{setPage(p);setSideOpen(false);}} role={role} onLogout={handleLogout} mobile={isMobile} open={sideOpen} onClose={()=>setSideOpen(false)}/>
+    <Sidebar page={page} setPage={p=>{setPage(p);setSideOpen(false);}} role={role} onLogout={handleLogout} mobile={isMobile} open={sideOpen} onClose={()=>setSideOpen(false)} onResetAll={resetAll}/>
     <div style={{flex:1,display:"flex",flexDirection:"column",minWidth:0,overflow:"hidden"}}>
       <div style={{background:"rgba(255,255,255,.82)",backdropFilter:"blur(10px)",WebkitBackdropFilter:"blur(10px)",borderBottom:`1px solid ${C.border}`,padding:isMobile?"11px 16px":"10px 24px",display:"flex",alignItems:"center",gap:10,flexShrink:0,position:"sticky",top:0,zIndex:40}}>
         {isMobile&&<button onClick={()=>setSideOpen(true)} style={{background:"none",border:"none",fontSize:22,cursor:"pointer",padding:2}}>☰</button>}
