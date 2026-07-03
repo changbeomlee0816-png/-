@@ -1023,6 +1023,11 @@ function StudentsPage({students,setStudents,prayers,attendance}){
   const thisMonth=new Date().getMonth()+1;
   const birthdayStudents=filtered.filter(s=>s.birth&&parseInt(s.birth.slice(5,7))===thisMonth).sort((a,b)=>parseInt(a.birth.slice(8,10))-parseInt(b.birth.slice(8,10)));
   const save=()=>{if(!form.name){alert("이름 필수");return;}setStudents(prev=>sel?prev.map(s=>s.id===sel.id?{...s,...form}:s):[...prev,{id:Date.now(),...form}]);setModal(false);};
+  const del=(s)=>{
+    if(!window.confirm(`${s.name} 학생을 삭제할까요? 출석·기도제목 기록은 남아있지만 학생 명단에서는 사라집니다. 되돌릴 수 없습니다.`))return;
+    setStudents(prev=>prev.filter(x=>x.id!==s.id));
+    if(sel?.id===s.id)setSel(null);
+  };
 
   // 학생 일괄 등록 양식 다운로드 (현재 부서 학생 명단 미리 채움 — 기존 학생 정보 수정 + 신규 행 추가 모두 가능)
   const STUDENT_TEMPLATE_HEADERS=["이름","반","학년","성별","생년월일","학교","교적","연락처","부모님연락처","기도제목","메모"];
@@ -1083,7 +1088,10 @@ function StudentsPage({students,setStudents,prayers,attendance}){
       <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16,flexWrap:"wrap"}}>
         <Btn onClick={()=>setSel(null)}>← 목록</Btn>
         <div style={{fontSize:18,fontWeight:800}}>{st.name}</div>
-        <div style={{marginLeft:"auto"}}><Btn s="sm" onClick={()=>{setForm({...st});setModal(true);}}>정보 수정</Btn></div>
+        <div style={{marginLeft:"auto",display:"flex",gap:8}}>
+          <Btn s="sm" onClick={()=>{setForm({...st});setModal(true);}}>정보 수정</Btn>
+          <Btn s="sm" v="danger" onClick={()=>del(st)}>삭제</Btn>
+        </div>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"260px 1fr",gap:14}}>
         <Card>
@@ -1157,9 +1165,9 @@ function StudentsPage({students,setStudents,prayers,attendance}){
     <Card>
       <div style={{overflowX:"auto"}}>
         <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-          <thead><tr>{["이름","반","학년","성별","학교","교적","최근 출석률","연락처"].map(h=><th key={h} style={{padding:"10px 16px",textAlign:"left",fontSize:11,fontWeight:600,color:C.textH,background:C.surfaceL,borderBottom:`1px solid ${C.border}`,whiteSpace:"nowrap"}}>{h}</th>)}</tr></thead>
+          <thead><tr>{["이름","반","학년","성별","학교","교적","최근 출석률","연락처",""].map(h=><th key={h} style={{padding:"10px 16px",textAlign:"left",fontSize:11,fontWeight:600,color:C.textH,background:C.surfaceL,borderBottom:`1px solid ${C.border}`,whiteSpace:"nowrap"}}>{h}</th>)}</tr></thead>
           <tbody>
-            {filtered.length===0?<tr><td colSpan={8} style={{padding:32,textAlign:"center",color:C.textH}}>검색 결과가 없습니다</td></tr>
+            {filtered.length===0?<tr><td colSpan={9} style={{padding:32,textAlign:"center",color:C.textH}}>검색 결과가 없습니다</td></tr>
             :filtered.sort((a,b)=>a.banName.localeCompare(b.banName)||a.name.localeCompare(b.name)).map(s=>{
               const rate=attendanceRate(s.id,attendance);
               const streak=consecutiveAbsences(s.id,attendance);
@@ -1172,6 +1180,7 @@ function StudentsPage({students,setStudents,prayers,attendance}){
                 <td style={{padding:"11px 16px"}}><Chip c={s.churchReg==="등록"?"green":"gray"}>{s.churchReg}</Chip></td>
                 <td style={{padding:"11px 16px"}}><div style={{display:"flex",alignItems:"center",gap:8,minWidth:100}}><PBar rate={rate} thin/><span style={{fontSize:11,color:C.textH,minWidth:30}}>{rate}%</span></div></td>
                 <td style={{padding:"11px 16px",color:C.textH,fontSize:12}}>{s.phone||s.parentPhone||"-"}</td>
+                <td style={{padding:"11px 16px"}}><Btn s="sm" v="danger" onClick={e=>{e.stopPropagation();del(s);}}>삭제</Btn></td>
               </tr>;
             })}
           </tbody>
@@ -1214,6 +1223,10 @@ function TeachersPage({teachers,setTeachers}){
   const[form,setForm]=useState({dept:"중등부",name:"",role:"교사",ban:"1반",phone:"",joinDate:TODAY,birthday:""});
   const dTeachers=teachers.filter(t=>t.dept===dept||t.dept==="공통");
   const save=()=>{if(!form.name)return;setTeachers(prev=>prev.find(t=>t.name===form.name)?prev.map(t=>t.name===form.name?{...t,...form}:t):[...prev,{id:Date.now(),...form}]);setModal(false);};
+  const del=(t)=>{
+    if(!window.confirm(`${t.name} 선생님을 삭제할까요? 되돌릴 수 없습니다.`))return;
+    setTeachers(prev=>prev.filter(x=>x.id!==t.id));
+  };
   const rC={전도사:"rose",부장:"amber",교사:"blue",찬양팀장:"purple",회계:"sky",총무:"amber"};
   const thisMonth=new Date().getMonth()+1;
   const birthdayTeachers=dTeachers.filter(t=>t.birthday&&parseInt(t.birthday.slice(0,2))===thisMonth).sort((a,b)=>a.birthday.localeCompare(b.birthday));
@@ -1291,7 +1304,10 @@ function TeachersPage({teachers,setTeachers}){
           <div style={{fontSize:12,color:C.textH}}>{t.ban!=="-"?`담당반: ${t.ban} · `:""}{t.phone}</div>
         </div>
         <div style={{textAlign:"right",fontSize:12,color:C.textH}}><div>사역 시작</div><div style={{fontWeight:600}}>{dKr(t.joinDate)}</div></div>
-        <Btn s="sm" onClick={()=>{setForm({...t});setModal(true);}}>수정</Btn>
+        <div style={{display:"flex",gap:6}}>
+          <Btn s="sm" onClick={()=>{setForm({...t});setModal(true);}}>수정</Btn>
+          <Btn s="sm" v="danger" onClick={()=>del(t)}>삭제</Btn>
+        </div>
       </div>)}
     </Card>
     <Modal open={modal} onClose={()=>setModal(false)} title="교사 등록/수정">
