@@ -20,6 +20,14 @@
 html,body{height:100%;}
 body{font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo',sans-serif;}
 input,select,textarea,button{font-family:inherit;}
+button{transition:transform .12s ease,box-shadow .12s ease,filter .12s ease,background .15s ease;}
+button:active{transform:scale(.97);}
+.sc-btn-primary:hover{filter:brightness(1.06);box-shadow:0 6px 16px rgba(79,70,229,.32);}
+.sc-btn-sheet:hover{filter:brightness(1.05);box-shadow:0 6px 16px rgba(15,157,88,.3);}
+.sc-card{transition:box-shadow .16s ease,transform .16s ease;}
+.sc-card-clickable:hover{box-shadow:0 8px 24px rgba(30,27,75,.09);transform:translateY(-1px);}
+input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible{outline:2px solid #818CF8;outline-offset:1px;}
+@media (prefers-reduced-motion:reduce){*{transition:none !important;animation:none !important;}}
 </style>
 </head>
 <body>
@@ -162,6 +170,12 @@ const BULLETINS0 = [
   },
 ];
 
+// 회의록 (링크 또는 파일 첨부)
+const MEETINGS0 = [
+  {id:1,dept:"공통",title:"2026년 2분기 교사 회의록",date:"2026-06-07",category:"교사회의",author:"김전도",type:"link",url:"https://docs.google.com/document/d/example",fileName:"",fileData:"",memo:"여름 수련회 준비 사항 논의"},
+  {id:2,dept:"중등부",title:"중등부 여름 수련회 기획 회의",date:"2026-06-14",category:"부서모임",author:"서지훈",type:"link",url:"https://docs.google.com/document/d/example2",fileName:"",fileData:"",memo:"장소·일정·예산 확정"},
+];
+
 // 부서별 기본 예배 순서 템플릿
 const DEFAULT_ORDER = {
   고등부:[
@@ -186,10 +200,11 @@ function Chip({c,children,size="sm"}){
 }
 function Btn({children,v="default",s="md",onClick,disabled,block,style:sx={}}){
   const sz={sm:{padding:"5px 13px",fontSize:12},md:{padding:"8px 18px",fontSize:13},lg:{padding:"11px 24px",fontSize:14}};
-  const vs={default:{background:C.surface,color:C.text,border:`1px solid ${C.borderS}`},primary:{background:C.primary,color:"#fff",border:"none"},ghost:{background:"transparent",color:C.primary,border:"none"},danger:{background:C.dangerL,color:C.danger,border:"1px solid #FECACA"},success:{background:C.successL,color:C.success,border:"1px solid #A7F3D0"},sheet:{background:"#0F9D58",color:"#fff",border:"none"}};
-  return <button style={{cursor:disabled?"not-allowed":"pointer",borderRadius:10,fontWeight:600,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:5,opacity:disabled?0.5:1,width:block?"100%":"auto",...sz[s],...vs[v],...sx}} onClick={onClick} disabled={disabled}>{children}</button>;
+  const vs={default:{background:C.surface,color:C.text,border:`1px solid ${C.borderS}`},primary:{background:"linear-gradient(135deg,#6366F1,#4F46E5)",color:"#fff",border:"none",boxShadow:"0 2px 8px rgba(79,70,229,.25)"},ghost:{background:"transparent",color:C.primary,border:"none"},danger:{background:C.dangerL,color:C.danger,border:"1px solid #FECACA"},success:{background:C.successL,color:C.success,border:"1px solid #A7F3D0"},sheet:{background:"linear-gradient(135deg,#16B673,#0F9D58)",color:"#fff",border:"none",boxShadow:"0 2px 8px rgba(15,157,88,.22)"}};
+  const cls=v==="primary"?"sc-btn-primary":v==="sheet"?"sc-btn-sheet":"";
+  return <button className={cls} style={{cursor:disabled?"not-allowed":"pointer",borderRadius:10,fontWeight:600,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:5,opacity:disabled?0.5:1,width:block?"100%":"auto",...sz[s],...vs[v],...sx}} onClick={onClick} disabled={disabled}>{children}</button>;
 }
-function Card({children,style:sx={},onClick}){return <div onClick={onClick} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:16,overflow:"hidden",...sx}}>{children}</div>;}
+function Card({children,style:sx={},onClick}){return <div className={`sc-card${onClick?" sc-card-clickable":""}`} onClick={onClick} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:16,overflow:"hidden",boxShadow:"0 1px 3px rgba(30,27,75,.04)",cursor:onClick?"pointer":"default",...sx}}>{children}</div>;}
 function CHdr({title,sub,right}){return <div style={{padding:"14px 20px",borderBottom:`1px solid ${C.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}><div><div style={{fontSize:14,fontWeight:700,color:C.text}}>{title}</div>{sub&&<div style={{fontSize:11,color:C.textH,marginTop:2}}>{sub}</div>}</div>{right&&<div style={{display:"flex",gap:8,alignItems:"center"}}>{right}</div>}</div>;}
 function Metrics({items}){return <div style={{display:"grid",gridTemplateColumns:`repeat(${Math.min(items.length,4)},1fr)`,gap:10,marginBottom:18}}>{items.map((m,i)=><div key={i} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px 16px",borderTop:m.ac?`3px solid ${m.ac}`:"3px solid transparent"}}><div style={{fontSize:11,color:C.textH,marginBottom:4,fontWeight:500}}>{m.label}</div><div style={{fontSize:22,fontWeight:700,color:m.color||C.text}}>{m.value}</div>{m.sub&&<div style={{fontSize:11,color:C.textH,marginTop:3}}>{m.sub}</div>}</div>)}</div>;}
 const iS={fontSize:13,padding:"9px 11px",border:`1px solid ${C.borderS}`,borderRadius:9,background:C.surface,color:C.text,width:"100%",outline:"none"};
@@ -361,56 +376,108 @@ function LoginPage({onLogin}){
 }
 
 // ══════════════════════════════════════════ 사이드바 ══════════════════════════════════════════
+// 2단계 메뉴 구조: 대분류(하위 항목이 있으면 children, 없으면 바로 k로 이동) / 중분류(children)
 const ADMIN_MENU=[
   {k:"home",icon:"⊞",label:"대시보드"},
-  {k:"attendance",icon:"✅",label:"출석 관리",group:"예배"},
-  {k:"bulletin",icon:"📄",label:"주보"},
-  {k:"students",icon:"👤",label:"학생 관리",group:"인원"},
-  {k:"teachers",icon:"👩‍🏫",label:"교사 관리"},
+  {icon:"👥",label:"인원관리",children:[
+    {k:"teachers",icon:"👩‍🏫",label:"교사 관리"},
+    {k:"students",icon:"👤",label:"학생 관리"},
+    {k:"attendance",icon:"✅",label:"출석 관리"},
+  ]},
+  {k:"notice",icon:"📢",label:"공지사항",children:[
+    {k:"bulletin",icon:"📄",label:"주보"},
+    {k:"events",icon:"🗓",label:"행사일정"},
+  ]},
   {k:"prayer",icon:"🙏",label:"기도제목"},
-  {k:"notice",icon:"📢",label:"공지사항",group:"소통"},
-  {k:"budget",icon:"💰",label:"예산·지출 관리",group:"재정"},
-  {k:"events",icon:"🗓",label:"행사 관리",group:"행사"},
+  {k:"meetings",icon:"🗂",label:"회의록 관리"},
+  {k:"budget",icon:"💰",label:"예산·지출 관리"},
 ];
 const TEACHER_MENU=[
   {k:"home",icon:"⊞",label:"오늘 현황"},
-  {k:"attendance",icon:"✅",label:"출석 관리",group:"예배"},
-  {k:"bulletin",icon:"📄",label:"주보"},
-  {k:"students",icon:"👤",label:"학생 관리",group:"인원"},
+  {icon:"👥",label:"인원관리",children:[
+    {k:"students",icon:"👤",label:"학생 관리"},
+    {k:"attendance",icon:"✅",label:"출석 관리"},
+  ]},
+  {k:"notice",icon:"📢",label:"공지사항",children:[
+    {k:"bulletin",icon:"📄",label:"주보"},
+    {k:"events",icon:"🗓",label:"행사일정"},
+  ]},
   {k:"prayer",icon:"🙏",label:"기도제목"},
-  {k:"notice",icon:"📢",label:"공지사항",group:"소통"},
-  {k:"events",icon:"🗓",label:"행사 일정",group:"행사"},
+  {k:"meetings",icon:"🗂",label:"회의록 관리"},
 ];
 const PARENT_MENU=[
   {k:"home",icon:"🏠",label:"홈"},
-  {k:"notice",icon:"📢",label:"공지사항",group:"정보"},
+  {k:"notice",icon:"📢",label:"공지사항",children:[
+    {k:"bulletin",icon:"📄",label:"주보"},
+    {k:"events",icon:"🗓",label:"행사일정"},
+  ]},
   {k:"prayer",icon:"🙏",label:"우리 아이 기도제목"},
-  {k:"bulletin",icon:"📄",label:"주보"},
-  {k:"events",icon:"🗓",label:"행사 일정"},
 ];
+function flattenMenu(menu){
+  const out=[];
+  menu.forEach(m=>{ if(m.k)out.push(m); if(m.children)m.children.forEach(c=>out.push(c)); });
+  return out;
+}
 
 function Sidebar({page,setPage,role,onLogout,mobile,open,onClose}){
   const menu=role==="admin"?ADMIN_MENU:role==="teacher"?TEACHER_MENU:PARENT_MENU;
-  const groups={};menu.forEach(m=>{const g=m.group||"_";if(!groups[g])groups[g]=[];groups[g].push(m);});
   const roleLabel=role==="admin"?"👑 전도사님/부장님":role==="teacher"?"👩‍🏫 선생님":"👨‍👩‍👧 학부모";
+  const isChildActive=m=>m.children?m.children.some(c=>c.k===page):false;
+  const[openGroups,setOpenGroups]=useState(()=>{
+    const init={}; menu.forEach(m=>{ if(m.children)init[m.label]=true; }); return init;
+  });
+  const toggleGroup=label=>setOpenGroups(p=>({...p,[label]:!p[label]}));
+  const go=k=>{ setPage(k); if(mobile)onClose(); };
+  const itemStyle=(active,sub)=>({
+    width:"100%",textAlign:"left",padding:sub?"7px 10px":"9px 10px",borderRadius:10,fontSize:sub?12.5:13.5,
+    display:"flex",alignItems:"center",gap:10,
+    color:active?"#fff":"rgba(226,232,255,.68)",
+    background:active?"linear-gradient(90deg, rgba(129,140,248,.35), rgba(129,140,248,.12))":"transparent",
+    border:"none",cursor:"pointer",marginBottom:2,fontWeight:active?700:500,
+    transition:"background .15s,color .15s",
+  });
+
   const content=<div style={{display:"flex",flexDirection:"column",height:"100%"}}>
-    <div style={{padding:"20px 16px 16px",borderBottom:"1px solid rgba(255,255,255,.1)"}}>
-      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
-        <div style={{width:36,height:36,background:"rgba(255,255,255,.15)",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>✝️</div>
-        <div><div style={{fontSize:13,fontWeight:800,color:"#E0E7FF"}}>수서교회</div><div style={{fontSize:11,color:"rgba(255,255,255,.5)"}}>중고등부</div></div>
+    <div style={{padding:"22px 16px 16px",borderBottom:"1px solid rgba(255,255,255,.08)"}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+        <div style={{width:38,height:38,background:"linear-gradient(135deg,#818CF8,#4F46E5)",borderRadius:11,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,boxShadow:"0 4px 14px rgba(79,70,229,.5)"}}>✝️</div>
+        <div><div style={{fontSize:13,fontWeight:800,color:"#EEF2FF",letterSpacing:"-.01em"}}>수서교회</div><div style={{fontSize:11,color:"rgba(255,255,255,.45)"}}>중고등부 통합관리</div></div>
       </div>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 10px",background:"rgba(255,255,255,.08)",borderRadius:10}}>
-        <div style={{fontSize:11,color:"rgba(255,255,255,.5)"}}>{roleLabel}</div>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"9px 11px",background:"rgba(255,255,255,.06)",borderRadius:11,border:"1px solid rgba(255,255,255,.06)"}}>
+        <div style={{fontSize:11,color:"rgba(255,255,255,.6)",fontWeight:500}}>{roleLabel}</div>
         <button onClick={onLogout} style={{background:"none",border:"none",color:"rgba(255,255,255,.4)",cursor:"pointer",fontSize:11}}>로그아웃</button>
       </div>
     </div>
-    <nav style={{flex:1,padding:"10px 8px",overflowY:"auto"}}>
-      {Object.entries(groups).map(([g,items])=><div key={g}>{g!=="__"&&<div style={{fontSize:10,color:"rgba(255,255,255,.3)",padding:"10px 8px 4px",letterSpacing:".08em",textTransform:"uppercase",fontWeight:700}}>{g}</div>}{items.map(m=><button key={m.k} onClick={()=>{setPage(m.k);if(mobile)onClose();}} style={{width:"100%",textAlign:"left",padding:"9px 12px",borderRadius:9,fontSize:13,display:"flex",alignItems:"center",gap:10,color:page===m.k?"#fff":"rgba(255,255,255,.55)",background:page===m.k?"rgba(255,255,255,.15)":"transparent",border:"none",cursor:"pointer",marginBottom:1,fontWeight:page===m.k?700:400}}><span style={{fontSize:16,flexShrink:0}}>{m.icon}</span>{m.label}</button>)}</div>)}
+    <nav style={{flex:1,padding:"14px 10px",overflowY:"auto"}}>
+      {menu.map(m=>{
+        if(!m.children){
+          const active=page===m.k;
+          return <button key={m.k} onClick={()=>go(m.k)} style={itemStyle(active)}>
+            <span style={{fontSize:16,flexShrink:0,width:18,textAlign:"center"}}>{m.icon}</span>{m.label}
+          </button>;
+        }
+        const expanded=!!openGroups[m.label];
+        const parentActive=m.k&&page===m.k;
+        return <div key={m.label} style={{marginBottom:2}}>
+          <div style={{display:"flex",alignItems:"stretch",gap:2}}>
+            <button onClick={()=>{ if(m.k)go(m.k); if(!expanded)toggleGroup(m.label); }} style={{...itemStyle(parentActive),flex:1}}>
+              <span style={{fontSize:16,flexShrink:0,width:18,textAlign:"center"}}>{m.icon}</span>{m.label}
+            </button>
+            <button onClick={()=>toggleGroup(m.label)} aria-label={expanded?"접기":"펼치기"} style={{background:"transparent",border:"none",color:"rgba(255,255,255,.35)",cursor:"pointer",padding:"0 10px",fontSize:10,transform:expanded?"rotate(90deg)":"none",transition:"transform .18s"}}>▶</button>
+          </div>
+          {expanded&&<div style={{marginLeft:15,paddingLeft:12,borderLeft:"1px solid rgba(255,255,255,.1)",marginTop:2,marginBottom:4}}>
+            {m.children.map(c=><button key={c.k} onClick={()=>go(c.k)} style={itemStyle(page===c.k,true)}>
+              <span style={{fontSize:14,flexShrink:0,width:15,textAlign:"center"}}>{c.icon}</span>{c.label}
+            </button>)}
+          </div>}
+        </div>;
+      })}
     </nav>
     <div style={{padding:"12px 16px",borderTop:"1px solid rgba(255,255,255,.08)",fontSize:11,color:"rgba(255,255,255,.3)"}}>{new Date().toLocaleDateString("ko-KR",{year:"numeric",month:"long",day:"numeric",weekday:"short"})}</div>
   </div>;
-  if(mobile)return <>{open&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",zIndex:90}} onClick={onClose}/>}<div style={{position:"fixed",top:0,left:0,bottom:0,width:225,background:C.sidebar,zIndex:100,transform:open?"translateX(0)":"translateX(-100%)",transition:"transform .25s ease"}}>{content}</div></>;
-  return <div style={{width:220,background:C.sidebar,flexShrink:0,height:"100vh",position:"sticky",top:0,display:"flex",flexDirection:"column"}}>{content}</div>;
+  const sidebarBg="linear-gradient(180deg,#211D52 0%,#1E1B4B 55%,#181530 100%)";
+  if(mobile)return <>{open&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",zIndex:90}} onClick={onClose}/>}<div style={{position:"fixed",top:0,left:0,bottom:0,width:235,background:sidebarBg,zIndex:100,transform:open?"translateX(0)":"translateX(-100%)",transition:"transform .25s ease",boxShadow:"4px 0 24px rgba(0,0,0,.25)"}}>{content}</div></>;
+  return <div style={{width:228,background:sidebarBg,flexShrink:0,height:"100vh",position:"sticky",top:0,display:"flex",flexDirection:"column"}}>{content}</div>;
 }
 
 // ══════════════════════════════════════════ 대시보드 ══════════════════════════════════════════
@@ -786,7 +853,7 @@ function AttendancePage({students,attendance,setAttendance}){
 
 
 // ══════════════════════════════════════════ 주보 ══════════════════════════════════════════
-function BulletinPage({bulletins,setBulletins,role}){
+function BulletinPage({bulletins,setBulletins,role,notices}){
   const[dept,setDept]=useState("고등부");
   const[modal,setModal]=useState(false);
   const[viewId,setViewId]=useState(null);
@@ -811,12 +878,13 @@ function BulletinPage({bulletins,setBulletins,role}){
 
   // 주보 상세 보기
   if(viewing){
+    const relatedNotices=(notices||[]).filter(n=>n.dept==="공통"||n.dept===viewing.dept).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5);
     return <div>
       <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}>
         <Btn onClick={()=>setViewId(null)}>← 목록</Btn>
         <DeptBadge dept={viewing.dept}/>
       </div>
-      <Card>
+      <Card style={{marginBottom:14}}>
         <div style={{padding:"28px 32px"}}>
           <div style={{textAlign:"center",marginBottom:24}}>
             <div style={{fontSize:11,color:C.textH,letterSpacing:".1em",textTransform:"uppercase",marginBottom:6}}>수서교회 {viewing.dept} 주일 예배</div>
@@ -847,6 +915,17 @@ function BulletinPage({bulletins,setBulletins,role}){
           </div>
         </div>
       </Card>
+      {relatedNotices.length>0&&<Card>
+        <CHdr title="📢 공지사항" sub={`${viewing.dept} · 공통 공지 · 최근 ${relatedNotices.length}건`}/>
+        {relatedNotices.map(n=><div key={n.id} style={{padding:"14px 20px",borderBottom:`1px solid ${C.border}`}}>
+          <div style={{display:"flex",gap:6,marginBottom:5,flexWrap:"wrap",alignItems:"center"}}>
+            {n.important&&<Chip c="red">📌 중요</Chip>}<DeptBadge dept={n.dept}/>
+            <span style={{fontSize:13,fontWeight:700,color:C.text}}>{n.title}</span>
+            <span style={{fontSize:11,color:C.textH,marginLeft:"auto"}}>{n.author} · {dKr(n.date)}</span>
+          </div>
+          <div style={{fontSize:13,color:C.textS,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{n.content}</div>
+        </div>)}
+      </Card>}
     </div>;
   }
 
@@ -1607,6 +1686,111 @@ function EventsPage({events,setEvents,role}){
   </div>;
 }
 
+// ══════════════════════════════════════════ 회의록 관리 ══════════════════════════════════════════
+const MEETING_CATS=["교사회의","임원회의","부서모임","기타"];
+function readFileAsDataURL(file){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=()=>resolve(reader.result);
+    reader.onerror=reject;
+    reader.readAsDataURL(file);
+  });
+}
+function MeetingsPage({meetings,setMeetings,role}){
+  const[deptFilter,setDeptFilter]=useState("전체");
+  const[modal,setModal]=useState(false);
+  const[sel,setSel]=useState(null);
+  const empty={dept:"공통",title:"",date:TODAY,category:"교사회의",author:"",type:"link",url:"",fileName:"",fileData:"",memo:""};
+  const[form,setForm]=useState(empty);
+  const[fileErr,setFileErr]=useState("");
+  const canWrite=role==="admin"||role==="teacher";
+  const filtered=(deptFilter==="전체"?meetings:meetings.filter(m=>m.dept===deptFilter||m.dept==="공통")).sort((a,b)=>b.date.localeCompare(a.date));
+
+  const onPickFile=async(file)=>{
+    setFileErr("");
+    if(!file)return;
+    if(file.size>4*1024*1024){ setFileErr("파일이 너무 큽니다 (4MB 이하만 첨부 가능). 큰 파일은 링크(구글드라이브 등)로 등록해주세요."); return; }
+    try{ const data=await readFileAsDataURL(file); setForm(f=>({...f,fileName:file.name,fileData:data})); }
+    catch(e){ setFileErr("파일을 읽는 중 오류가 발생했습니다."); }
+  };
+  const save=()=>{
+    if(!form.title){alert("제목 필수");return;}
+    if(form.type==="link"&&!form.url){alert("링크 URL을 입력해주세요.");return;}
+    if(form.type==="file"&&!form.fileData){alert("첨부할 파일을 선택해주세요.");return;}
+    setMeetings(prev=>[{id:Date.now(),...form,author:form.author||"-"},...prev]);
+    setModal(false); setForm(empty); setFileErr("");
+  };
+  const del=(id)=>{ if(!window.confirm("이 회의록을 삭제할까요?"))return; setMeetings(prev=>prev.filter(m=>m.id!==id)); if(sel?.id===id)setSel(null); };
+  const catColor={교사회의:"blue",임원회의:"purple",부서모임:"amber",기타:"gray"};
+
+  if(sel){
+    const m=meetings.find(x=>x.id===sel.id)||sel;
+    return <div>
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}><Btn onClick={()=>setSel(null)}>← 목록</Btn></div>
+      <Card>
+        <div style={{padding:"26px 30px"}}>
+          <div style={{display:"flex",gap:6,marginBottom:12}}><DeptBadge dept={m.dept}/><Chip c={catColor[m.category]||"gray"}>{m.category}</Chip></div>
+          <div style={{fontSize:22,fontWeight:800,color:C.text,marginBottom:8}}>{m.title}</div>
+          <div style={{fontSize:13,color:C.textH,marginBottom:20}}>{m.author} · {dKr(m.date)}</div>
+          {m.memo&&<div style={{fontSize:14,color:C.textS,lineHeight:1.8,padding:"14px 18px",background:C.surfaceL,borderRadius:12,marginBottom:20,whiteSpace:"pre-wrap"}}>{m.memo}</div>}
+          {m.type==="link"?
+            <a href={m.url} target="_blank" rel="noopener noreferrer" style={{display:"inline-flex",alignItems:"center",gap:8,padding:"12px 20px",background:C.primaryL,color:C.primary,borderRadius:12,fontWeight:700,fontSize:14,textDecoration:"none"}}>🔗 회의 자료 링크 열기</a>
+            :<a href={m.fileData} download={m.fileName} style={{display:"inline-flex",alignItems:"center",gap:8,padding:"12px 20px",background:C.primaryL,color:C.primary,borderRadius:12,fontWeight:700,fontSize:14,textDecoration:"none"}}>📎 {m.fileName} 다운로드</a>}
+          {canWrite&&<div style={{marginTop:24}}><Btn v="danger" s="sm" onClick={()=>del(m.id)}>삭제</Btn></div>}
+        </div>
+      </Card>
+    </div>;
+  }
+
+  return <div>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:10}}>
+      <div><div style={{fontSize:20,fontWeight:800}}>회의록 관리</div><div style={{fontSize:13,color:C.textH,marginTop:2}}>회의 자료 링크·파일 보관함</div></div>
+      {canWrite&&<Btn v="primary" onClick={()=>{setForm(empty);setFileErr("");setModal(true);}}>+ 회의록 등록</Btn>}
+    </div>
+    <div style={{display:"flex",gap:4,marginBottom:16,flexWrap:"wrap"}}>
+      {["전체","공통","중등부","고등부"].map(d=><button key={d} onClick={()=>setDeptFilter(d)} style={{padding:"6px 16px",borderRadius:20,fontSize:12,fontWeight:600,cursor:"pointer",border:"none",background:d===deptFilter?C.primary:C.surfaceL,color:d===deptFilter?"#fff":C.textS}}>{d}</button>)}
+    </div>
+    {filtered.length===0?<div style={{textAlign:"center",padding:48,color:C.textH}}>등록된 회의록이 없습니다</div>
+    :<div style={{display:"flex",flexDirection:"column",gap:8}}>
+      {filtered.map(m=><Card key={m.id} style={{cursor:"pointer"}} onClick={()=>setSel(m)}>
+        <div style={{padding:"15px 20px",display:"flex",alignItems:"center",gap:14}}>
+          <div style={{width:44,height:44,borderRadius:14,background:C.primaryL,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>{m.type==="link"?"🔗":"📎"}</div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{display:"flex",gap:6,marginBottom:4,flexWrap:"wrap"}}><DeptBadge dept={m.dept}/><Chip c={catColor[m.category]||"gray"}>{m.category}</Chip></div>
+            <div style={{fontSize:14,fontWeight:700,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.title}</div>
+            <div style={{fontSize:12,color:C.textH,marginTop:2}}>{m.author} · {dKr(m.date)}</div>
+          </div>
+          <span style={{color:C.textH,fontSize:18}}>›</span>
+        </div>
+      </Card>)}
+    </div>}
+
+    <Modal open={modal} onClose={()=>setModal(false)} title="회의록 등록" width={560}>
+      <FG cols={2}>
+        <FF label="대상 부서"><FSel value={form.dept} onChange={v=>setForm(f=>({...f,dept:v}))} options={["공통","중등부","고등부"]}/></FF>
+        <FF label="분류"><FSel value={form.category} onChange={v=>setForm(f=>({...f,category:v}))} options={MEETING_CATS}/></FF>
+        <FF label="제목" req span={2}><FI value={form.title} onChange={v=>setForm(f=>({...f,title:v}))} placeholder="예: 2026년 3분기 교사회의"/></FF>
+        <FF label="날짜"><FI type="date" value={form.date} onChange={v=>setForm(f=>({...f,date:v}))}/></FF>
+        <FF label="작성자"><FI value={form.author} onChange={v=>setForm(f=>({...f,author:v}))} placeholder="이름 입력"/></FF>
+        <FF label="자료 유형" span={2}>
+          <div style={{display:"flex",gap:6}}>
+            {[["link","🔗 링크"],["file","📎 파일 첨부"]].map(([v,l])=><button key={v} onClick={()=>setForm(f=>({...f,type:v}))} style={{flex:1,padding:"9px 12px",borderRadius:9,fontSize:13,fontWeight:600,cursor:"pointer",border:`1px solid ${form.type===v?C.primary:C.borderS}`,background:form.type===v?C.primaryL:C.surface,color:form.type===v?C.primary:C.textS}}>{l}</button>)}
+          </div>
+        </FF>
+        {form.type==="link"?
+          <FF label="링크 URL" req span={2}><FI value={form.url} onChange={v=>setForm(f=>({...f,url:v}))} placeholder="https://docs.google.com/..."/></FF>
+          :<FF label="파일 첨부 (4MB 이하)" req span={2}>
+            <input type="file" onChange={e=>onPickFile(e.target.files[0])} style={{...iS,padding:"7px 11px"}}/>
+            {form.fileName&&<div style={{fontSize:12,color:C.primary,marginTop:6,fontWeight:600}}>✓ {form.fileName}</div>}
+            {fileErr&&<div style={{fontSize:12,color:C.danger,marginTop:6}}>{fileErr}</div>}
+          </FF>}
+        <FF label="메모" span={2}><FTA value={form.memo} onChange={v=>setForm(f=>({...f,memo:v}))} rows={3} placeholder="회의 요약, 결정사항 등"/></FF>
+      </FG>
+      <div style={{padding:"0 20px 16px",display:"flex",gap:8}}><Btn v="primary" onClick={save}>등록</Btn><Btn onClick={()=>setModal(false)}>취소</Btn></div>
+    </Modal>
+  </div>;
+}
+
 // ══════════════════════════════════════════ APP ROOT ══════════════════════════════════════════
 function SuseoChurchERP(){
   const[loggedIn,setLoggedIn]=useState(false);
@@ -1641,8 +1825,9 @@ function SuseoChurchERP(){
   const[notices,setNotices]=useState(()=>lsLoad("notices",NOTICES0));
   const[prayers,setPrayers]=useState(()=>lsLoad("prayers",PRAYERS0));
   const[bulletins,setBulletins]=useState(()=>lsLoad("bulletins",BULLETINS0));
+  const[meetings,setMeetings]=useState(()=>lsLoad("meetings",MEETINGS0));
 
-  const collect=()=>({students,teachers,attendance,expenses,budgets,events,notices,prayers,bulletins});
+  const collect=()=>({students,teachers,attendance,expenses,budgets,events,notices,prayers,bulletins,meetings});
   const applyData=(d)=>{
     if(!d)return;
     if(d.students)setStudents(d.students);
@@ -1654,7 +1839,8 @@ function SuseoChurchERP(){
     if(d.notices)setNotices(d.notices);
     if(d.prayers)setPrayers(d.prayers);
     if(d.bulletins)setBulletins(d.bulletins);
-    ["students","teachers","attendance","expenses","budgets","events","notices","prayers","bulletins"].forEach(k=>{if(d[k])lsSave(k,d[k]);});
+    if(d.meetings)setMeetings(d.meetings);
+    ["students","teachers","attendance","expenses","budgets","events","notices","prayers","bulletins","meetings"].forEach(k=>{if(d[k])lsSave(k,d[k]);});
   };
 
   // 서버에서 데이터 가져오기
@@ -1694,8 +1880,8 @@ function SuseoChurchERP(){
 
   // 로컬 변경 감지 → 리비전 증가 + localStorage 백업
   useEffect(()=>{ if(bootRef.current){ localRev.current++; } 
-    lsSave("students",students);lsSave("teachers",teachers);lsSave("attendance",attendance);lsSave("expenses",expenses);lsSave("budgets",budgets);lsSave("events",events);lsSave("notices",notices);lsSave("prayers",prayers);lsSave("bulletins",bulletins);
-  },[students,teachers,attendance,expenses,budgets,events,notices,prayers,bulletins]);
+    lsSave("students",students);lsSave("teachers",teachers);lsSave("attendance",attendance);lsSave("expenses",expenses);lsSave("budgets",budgets);lsSave("events",events);lsSave("notices",notices);lsSave("prayers",prayers);lsSave("bulletins",bulletins);lsSave("meetings",meetings);
+  },[students,teachers,attendance,expenses,budgets,events,notices,prayers,bulletins,meetings]);
 
   // 주기적 동기화: 로컬 변경분 push + 서버 변경분 pull (3초마다)
   useEffect(()=>{
@@ -1723,12 +1909,12 @@ function SuseoChurchERP(){
       }catch(e){ setSyncStatus("offline"); }
     },3000);
     return ()=>clearInterval(timer);
-  },[students,teachers,attendance,expenses,budgets,events,notices,prayers,bulletins]);
+  },[students,teachers,attendance,expenses,budgets,events,notices,prayers,bulletins,meetings]);
 
   // 데이터 초기화 (서버 + 로컬 모두 기본값으로)
   const resetAll=async()=>{
     if(!window.confirm("모든 데이터를 초기 상태로 되돌립니다. 서버 데이터도 초기화됩니다. 계속할까요?"))return;
-    const init={students:STUDENTS0,teachers:TEACHERS0,attendance:ATTEND0,expenses:EXPENSES0,budgets:BUDGETS0,events:EVENTS0,notices:NOTICES0,prayers:PRAYERS0,bulletins:BULLETINS0};
+    const init={students:STUDENTS0,teachers:TEACHERS0,attendance:ATTEND0,expenses:EXPENSES0,budgets:BUDGETS0,events:EVENTS0,notices:NOTICES0,prayers:PRAYERS0,bulletins:BULLETINS0,meetings:MEETINGS0};
     try{ await pushRemote(init); }catch(e){}
     try{ Object.keys(window.localStorage).filter(k=>k.startsWith("suseo_")).forEach(k=>window.localStorage.removeItem(k)); }catch(e){}
     window.location.reload();
@@ -1739,7 +1925,7 @@ function SuseoChurchERP(){
   if(!loggedIn)return <LoginPage onLogin={handleLogin}/>;
 
   const menu=role==="admin"?ADMIN_MENU:role==="teacher"?TEACHER_MENU:PARENT_MENU;
-  const label=menu.find(m=>m.k===page)?.label||"현황";
+  const label=flattenMenu(menu).find(m=>m.k===page)?.label||"현황";
   const blocked=role==="teacher"&&["budget","teachers"].includes(page);
 
   // ══════════ 알림 센터: 심방 필요 학생 · 예산 초과 · 임박한 행사 ══════════
@@ -1773,7 +1959,7 @@ function SuseoChurchERP(){
   return <div style={{display:"flex",height:"100vh",fontFamily:"'Pretendard','Apple SD Gothic Neo','Noto Sans KR',system-ui,sans-serif",background:C.bg,color:C.text,overflow:"hidden"}}>
     <Sidebar page={page} setPage={p=>{setPage(p);setSideOpen(false);}} role={role} onLogout={handleLogout} mobile={isMobile} open={sideOpen} onClose={()=>setSideOpen(false)}/>
     <div style={{flex:1,display:"flex",flexDirection:"column",minWidth:0,overflow:"hidden"}}>
-      <div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:isMobile?"11px 16px":"10px 24px",display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
+      <div style={{background:"rgba(255,255,255,.82)",backdropFilter:"blur(10px)",WebkitBackdropFilter:"blur(10px)",borderBottom:`1px solid ${C.border}`,padding:isMobile?"11px 16px":"10px 24px",display:"flex",alignItems:"center",gap:10,flexShrink:0,position:"sticky",top:0,zIndex:40}}>
         {isMobile&&<button onClick={()=>setSideOpen(true)} style={{background:"none",border:"none",fontSize:22,cursor:"pointer",padding:2}}>☰</button>}
         <span style={{fontSize:isMobile?15:14,fontWeight:700,color:isMobile?C.text:C.textS}}>{label}</span>
         <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:isMobile?8:10}}>{role!=="parent"&&<NotifBell items={alertItems}/>}<SyncBadge compact={isMobile}/></div>
@@ -1787,11 +1973,12 @@ function SuseoChurchERP(){
         </div>:<>
           {page==="home"&&<Dashboard role={role} students={students} teachers={teachers} attendance={attendance} notices={notices} events={events} prayers={prayers} setPage={setPage} parentStudentId={parentStudentId}/>}
           {page==="attendance"&&<AttendancePage students={students} attendance={attendance} setAttendance={setAttendance}/>}
-          {page==="bulletin"&&<BulletinPage bulletins={bulletins} setBulletins={setBulletins} role={role}/>}
+          {page==="bulletin"&&<BulletinPage bulletins={bulletins} setBulletins={setBulletins} role={role} notices={notices}/>}
           {page==="students"&&<StudentsPage students={students} setStudents={setStudents} prayers={prayers} attendance={attendance}/>}
           {page==="teachers"&&<TeachersPage teachers={teachers} setTeachers={setTeachers}/>}
           {page==="prayer"&&<PrayerPage prayers={prayers} setPrayers={setPrayers} students={students} role={role} parentStudentId={parentStudentId}/>}
           {page==="notice"&&<NoticePage notices={notices} setNotices={setNotices} role={role}/>}
+          {page==="meetings"&&<MeetingsPage meetings={meetings} setMeetings={setMeetings} role={role}/>}
           {page==="budget"&&<BudgetPage budgets={budgets} setBudgets={setBudgets} expenses={expenses} setExpenses={setExpenses}/>}
           {page==="events"&&<EventsPage events={events} setEvents={setEvents} role={role}/>}
         </>}
