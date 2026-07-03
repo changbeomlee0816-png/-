@@ -243,6 +243,34 @@ function downloadCSV(filename,headers,rows){
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
+// CSV 파싱 (엑셀에서 편집 후 재업로드된 파일 읽기용, 큰따옴표·쉼표 처리)
+function parseCSV(text){
+  if(text.charCodeAt(0)===0xFEFF)text=text.slice(1);
+  const rows=[]; let row=[],field="",inQ=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(inQ){
+      if(c==='"'){ if(text[i+1]==='"'){field+='"';i++;} else inQ=false; }
+      else field+=c;
+    } else {
+      if(c==='"')inQ=true;
+      else if(c===','){row.push(field);field="";}
+      else if(c==='\r'){/* skip */}
+      else if(c==='\n'){row.push(field);rows.push(row);row=[];field="";}
+      else field+=c;
+    }
+  }
+  if(field.length>0||row.length>0){row.push(field);rows.push(row);}
+  return rows.filter(r=>r.some(f=>f.trim()!==""));
+}
+// 파일 업로드 버튼 (숨김 input + 트리거용 버튼)
+function FileUploadBtn({onFile,label="파일 업로드",accept=".csv"}){
+  const ref=React.useRef(null);
+  return <>
+    <input ref={ref} type="file" accept={accept} style={{display:"none"}} onChange={e=>{const f=e.target.files[0];if(f)onFile(f);e.target.value="";}}/>
+    <Btn s="sm" onClick={()=>ref.current&&ref.current.click()}><span style={{fontSize:13}}>📤</span> {label}</Btn>
+  </>;
+}
 
 // 실제 CSV 다운로드 모달 (엑셀에서 바로 열림)
 function SheetModal({open,onClose,title,rows,headers,filename}){
@@ -536,6 +564,7 @@ function AttendancePage({students,attendance,setAttendance}){
   const[sheetOpen,setSheetOpen]=useState(false);
   const[draft,setDraft]=useState({});      // 편집 중 임시 상태 {`sid_date`:"출석"/"결석"}
   const[saved,setSaved]=useState(false);
+  const[importMsg,setImportMsg]=useState(null); // {type,text} 파일 일괄 등록 결과 메시지
 
   const deptStudents=students.filter(s=>s.dept===dept);
   const bans=[...new Set(deptStudents.map(s=>s.banName))].sort();
@@ -580,8 +609,55 @@ function AttendancePage({students,attendance,setAttendance}){
       });
       return next;
     });
-    setDraft({}); setSaved(true);
+    setDraft({}); setSaved(true); setImportMsg(null);
     setTimeout(()=>setSaved(false),2500);
+  };
+
+  // 출석 입력 양식 다운로드 (반·이름·주일별 날짜 열, 현재 값 미리 채움)
+  const downloadTemplate=()=>{
+    const headers=["반","이름",...displaySundays];
+    const rows=bans.flatMap(ban=>deptStudents.filter(s=>s.banName===ban).sort((a,b)=>a.name.localeCompare(b.name))
+      .map(s=>[ban,s.name,...displaySundays.map(d=>{const st=viewStatus(s.id,d);return st==="출석"?"출석":st==="결석"?"결석":"";})]));
+    downloadCSV(`${year}_${dept}_출석입력양식`,headers,rows);
+  };
+  // 작성된 양식 파일을 읽어 반·이름으로 학생을 매칭하고 출석 draft에 일괄 반영
+  const IMPORT_PRESENT=new Set(["출석","○","o","1","present","v","√"]);
+  const IMPORT_ABSENT=new Set(["결석","×","x","0","absent"]);
+  const handleImportFile=(file)=>{
+    const reader=new FileReader();
+    reader.onload=(e)=>{
+      try{
+        const rows=parseCSV(String(e.target.result));
+        if(rows.length<2){setImportMsg({type:"danger",text:"파일에 데이터가 없습니다."});return;}
+        const header=rows[0].map(h=>h.trim());
+        const banIdx=header.indexOf("반"), nameIdx=header.indexOf("이름");
+        if(banIdx===-1||nameIdx===-1){setImportMsg({type:"danger",text:"'반', '이름' 열을 찾을 수 없습니다. '입력 양식 다운로드'로 받은 파일 형식을 사용해주세요."});return;}
+        const dateCols=header.map((h,i)=>({h,i})).filter(x=>/^\d{4}-\d{2}-\d{2}$/.test(x.h));
+        if(dateCols.length===0){setImportMsg({type:"danger",text:"날짜 형식(YYYY-MM-DD) 열을 찾을 수 없습니다."});return;}
+        let matched=0, unmatched=0, cellCount=0;
+        const newDraft={};
+        for(let r=1;r<rows.length;r++){
+          const row=rows[r];
+          const ban=(row[banIdx]||"").trim(), name=(row[nameIdx]||"").trim();
+          if(!name)continue;
+          const st=deptStudents.find(s=>s.name===name&&(!ban||s.banName===ban));
+          if(!st){unmatched++;continue;}
+          matched++;
+          dateCols.forEach(({h,i})=>{
+            const raw=(row[i]||"").trim().toLowerCase();
+            if(!raw)return;
+            let status=null;
+            if(IMPORT_PRESENT.has(raw))status="출석"; else if(IMPORT_ABSENT.has(raw))status="결석"; else return;
+            if(status!==realStatus(st.id,h)){ newDraft[`${st.id}_${h}`]=status; cellCount++; }
+          });
+        }
+        if(cellCount===0){setImportMsg({type:"warn",text:matched>0?`일치하는 학생 ${matched}명을 찾았지만, 기존 출석 기록과 달라진 내용이 없습니다.`:"일치하는 학생을 찾지 못했습니다. '반', '이름'이 정확한지 확인해주세요."});return;}
+        setDraft(p=>({...p,...newDraft}));
+        setSaved(false);
+        setImportMsg({type:"success",text:`학생 ${matched}명 중 ${cellCount}건이 기존 기록과 달라 반영 대기 중입니다. 아래 표에서 확인 후 저장 버튼을 눌러 반영하세요.${unmatched>0?` (이름·반이 일치하지 않아 건너뛴 행 ${unmatched}건)`:""}`});
+      }catch(err){ setImportMsg({type:"danger",text:"파일을 읽는 중 오류가 발생했습니다: "+err.message}); }
+    };
+    reader.readAsText(file,"utf-8");
   };
 
   // 부서 전체 출석률
@@ -597,21 +673,24 @@ function AttendancePage({students,attendance,setAttendance}){
       <div style={{fontSize:20,fontWeight:800}}>출석 관리</div>
       <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
         <SheetBtn onClick={()=>setSheetOpen(true)} label="출석부 CSV 다운로드"/>
+        <Btn s="sm" onClick={downloadTemplate}><span style={{fontSize:13}}>📋</span> 입력 양식 다운로드</Btn>
+        <FileUploadBtn onFile={handleImportFile} label="파일로 일괄 등록"/>
         <Btn v={hasChanges?"primary":"default"} onClick={save} disabled={!hasChanges}>💾 저장{hasChanges?` (${Object.keys(draft).length})`:""}</Btn>
       </div>
     </div>
-    <div style={{fontSize:13,color:C.textH,marginBottom:14}}>{year}년 반별 전체 출석 현황 · 셀을 클릭해 출석/결석을 바꾼 뒤 저장하세요</div>
+    <div style={{fontSize:13,color:C.textH,marginBottom:14}}>{year}년 반별 전체 출석 현황 · 셀을 클릭해 출석/결석을 바꾸거나, 양식을 받아 여러 명을 한번에 등록하세요</div>
 
     {saved&&<Alert type="success">출석 정보가 저장되었습니다.</Alert>}
+    {importMsg&&<Alert type={importMsg.type}>{importMsg.text}</Alert>}
     {hasChanges&&<Alert type="warn">저장하지 않은 변경사항이 {Object.keys(draft).length}건 있습니다. 저장 버튼을 눌러주세요.</Alert>}
 
     <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
       <div style={{display:"flex",gap:4}}>
-        {["중등부","고등부"].map(d=><button key={d} onClick={()=>{setDept(d);}} style={{padding:"7px 18px",borderRadius:20,fontSize:13,fontWeight:600,cursor:"pointer",border:"none",background:d===dept?C.primary:C.surfaceL,color:d===dept?"#fff":C.textS}}>{d}</button>)}
+        {["중등부","고등부"].map(d=><button key={d} onClick={()=>{setDept(d);setImportMsg(null);}} style={{padding:"7px 18px",borderRadius:20,fontSize:13,fontWeight:600,cursor:"pointer",border:"none",background:d===dept?C.primary:C.surfaceL,color:d===dept?"#fff":C.textS}}>{d}</button>)}
       </div>
       <div style={{marginLeft:"auto",display:"flex",gap:6,alignItems:"center"}}>
         <span style={{fontSize:12,color:C.textH}}>연도:</span>
-        {years.map(y=><button key={y} onClick={()=>setYear(y)} style={{padding:"6px 14px",borderRadius:16,fontSize:12,fontWeight:600,cursor:"pointer",border:`1px solid ${y===year?C.primary:C.border}`,background:y===year?C.primary:C.surface,color:y===year?"#fff":C.textS}}>{y}년</button>)}
+        {years.map(y=><button key={y} onClick={()=>{setYear(y);setImportMsg(null);}} style={{padding:"6px 14px",borderRadius:16,fontSize:12,fontWeight:600,cursor:"pointer",border:`1px solid ${y===year?C.primary:C.border}`,background:y===year?C.primary:C.surface,color:y===year?"#fff":C.textS}}>{y}년</button>)}
       </div>
     </div>
 
@@ -1595,12 +1674,11 @@ function SuseoChurchERP(){
   return <div style={{display:"flex",height:"100vh",fontFamily:"'Pretendard','Apple SD Gothic Neo','Noto Sans KR',system-ui,sans-serif",background:C.bg,color:C.text,overflow:"hidden"}}>
     <Sidebar page={page} setPage={p=>{setPage(p);setSideOpen(false);}} role={role} onLogout={handleLogout} mobile={isMobile} open={sideOpen} onClose={()=>setSideOpen(false)}/>
     <div style={{flex:1,display:"flex",flexDirection:"column",minWidth:0,overflow:"hidden"}}>
-      {isMobile&&<div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:"11px 16px",display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
-        <button onClick={()=>setSideOpen(true)} style={{background:"none",border:"none",fontSize:22,cursor:"pointer",padding:2}}>☰</button>
-        <span style={{fontSize:15,fontWeight:700}}>{label}</span>
-        <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:8}}>{role!=="parent"&&<NotifBell items={alertItems}/>}<SyncBadge compact/></div>
-      </div>}
-      {!isMobile&&<div style={{position:"absolute",top:16,right:24,zIndex:50,display:"flex",alignItems:"center",gap:10}}>{role!=="parent"&&<NotifBell items={alertItems}/>}<SyncBadge/></div>}
+      <div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:isMobile?"11px 16px":"10px 24px",display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
+        {isMobile&&<button onClick={()=>setSideOpen(true)} style={{background:"none",border:"none",fontSize:22,cursor:"pointer",padding:2}}>☰</button>}
+        <span style={{fontSize:isMobile?15:14,fontWeight:700,color:isMobile?C.text:C.textS}}>{label}</span>
+        <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:isMobile?8:10}}>{role!=="parent"&&<NotifBell items={alertItems}/>}<SyncBadge compact={isMobile}/></div>
+      </div>
       <div style={{flex:1,overflow:"auto",padding:isMobile?"14px":"24px 30px"}}>
         {blocked?<div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"50vh",gap:12}}>
           <div style={{fontSize:52}}>🔒</div>
