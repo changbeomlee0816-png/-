@@ -1101,18 +1101,63 @@ function TeachersPage({teachers,setTeachers}){
   const[dept,setDept]=useState("중등부");
   const[modal,setModal]=useState(false);
   const[sheetOpen,setSheetOpen]=useState(false);
+  const[importMsg,setImportMsg]=useState(null);
   const[form,setForm]=useState({dept:"중등부",name:"",role:"교사",ban:"1반",phone:"",joinDate:TODAY});
   const dTeachers=teachers.filter(t=>t.dept===dept||t.dept==="공통");
   const save=()=>{if(!form.name)return;setTeachers(prev=>prev.find(t=>t.name===form.name)?prev.map(t=>t.name===form.name?{...t,...form}:t):[...prev,{id:Date.now(),...form}]);setModal(false);};
   const rC={전도사:"rose",부장:"amber",교사:"blue"};
+
+  const TEACHER_TEMPLATE_HEADERS=["이름","역할","부서","담당반","연락처","사역시작일"];
+  const downloadTeacherTemplate=()=>{
+    const rows=dTeachers.map(t=>[t.name,t.role,t.dept,t.ban,t.phone||"",t.joinDate||""]);
+    downloadCSV(`${dept}_교사일괄등록양식`,TEACHER_TEMPLATE_HEADERS,rows);
+  };
+  const handleImportTeachers=(file)=>{
+    const reader=new FileReader();
+    reader.onload=(e)=>{
+      try{
+        const rows=parseCSV(String(e.target.result));
+        if(rows.length<2){setImportMsg({type:"danger",text:"파일에 데이터가 없습니다."});return;}
+        const header=rows[0].map(h=>h.trim());
+        const col=name=>header.indexOf(name);
+        const idx={name:col("이름"),role:col("역할"),dept:col("부서"),ban:col("담당반"),phone:col("연락처"),join:col("사역시작일")};
+        if(idx.name===-1){setImportMsg({type:"danger",text:"'이름' 열을 찾을 수 없습니다. '교사 일괄 등록 양식'으로 받은 파일 형식을 사용해주세요."});return;}
+        let added=0, updated=0, skipped=0;
+        let next=[...teachers];
+        for(let r=1;r<rows.length;r++){
+          const row=rows[r];
+          const name=(row[idx.name]||"").trim();
+          if(!name){skipped++;continue;}
+          const rec={
+            name,
+            role:idx.role>-1&&row[idx.role]?.trim()||"교사",
+            dept:idx.dept>-1&&row[idx.dept]?.trim()||dept,
+            ban:idx.ban>-1?(row[idx.ban]||"-").trim():"-",
+            phone:idx.phone>-1?(row[idx.phone]||"").trim():"",
+            joinDate:idx.join>-1?(row[idx.join]||"").trim():TODAY,
+          };
+          const existingIdx=next.findIndex(t=>t.name===name);
+          if(existingIdx>-1){ next[existingIdx]={...next[existingIdx],...rec}; updated++; }
+          else { next.push({id:Date.now()+Math.random(),...rec}); added++; }
+        }
+        setTeachers(next);
+        setImportMsg({type:"success",text:`신규 등록 ${added}명 · 정보 수정 ${updated}명이 반영되었습니다.${skipped>0?` (이름 누락으로 건너뜀 ${skipped}건)`:""}`});
+      }catch(err){ setImportMsg({type:"danger",text:"파일을 읽는 중 오류가 발생했습니다: "+err.message}); }
+    };
+    reader.readAsText(file,"utf-8");
+  };
+
   return <div>
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:10}}>
       <div style={{fontSize:20,fontWeight:800}}>교사 관리</div>
-      <div style={{display:"flex",gap:8}}>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
         <SheetBtn onClick={()=>setSheetOpen(true)} label="교사명단 CSV 다운로드"/>
+        <Btn s="sm" onClick={downloadTeacherTemplate}><span style={{fontSize:13}}>📋</span> 일괄 등록 양식 다운로드</Btn>
+        <FileUploadBtn onFile={handleImportTeachers} label="파일로 일괄 등록"/>
         <Btn v="primary" onClick={()=>{setForm({dept:"중등부",name:"",role:"교사",ban:"1반",phone:"",joinDate:TODAY});setModal(true);}}>+ 교사 등록</Btn>
       </div>
     </div>
+    {importMsg&&<Alert type={importMsg.type}>{importMsg.text}</Alert>}
     <div style={{display:"flex",gap:4,marginBottom:16}}>
       {["중등부","고등부"].map(d=><button key={d} onClick={()=>setDept(d)} style={{padding:"7px 18px",borderRadius:20,fontSize:13,fontWeight:600,cursor:"pointer",border:"none",background:d===dept?C.primary:C.surfaceL,color:d===dept?"#fff":C.textS}}>{d}</button>)}
     </div>
